@@ -1,40 +1,33 @@
-GPPPARAMS = -m32 -fno-use-cxa-atexit -nostdlib -fno-builtin -fno-rtti -fno-exceptions -fno-leading-underscore -fno-stack-protector
-ASPARAMS = --32
-LDPARAMS = -melf_i386
+CC= i686-elf-g++
+LD = i686-elf-gcc
+AS = nasm
+ASPARAMS = -f elf32
+CCPARAMS = -ffreestanding -O2 -Wall -Wextra -fno-exceptions -fno-rtti -fpermissive
+LDPARAMS = -ffreestanding -O2 -nostdlib -lgcc -T linker.ld
 
-objects = loader.o gdt.o kernel.o port.o interrupts.o interruptstubs.o
+objects = boot.o kernel.o
 
 %.o: %.cpp
-	g++ $(GPPPARAMS) -o $@ -c $<
+	$(CC) $(CCPARAMS) -c $< -o $@
 
 %.o: %.s
-	as $(ASPARAMS) -o $@ $<
+	$(AS) $(ASPARAMS) $< -o $@
 
-kernel.bin: linker.ld $(objects)
-	ld $(LDPARAMS) -T $< -o $@ $(objects)
+kernel.bin: $(objects)
+	$(LD) $(LDPARAMS) $(objects) -o $@
 
-install: kernel.bin
-	sudo cp $< /boot/kernel.bin
+sys.iso: kernel.bin
+	mkdir -p build/boot/grub
+	echo 'set timeout=0' > build/boot/grub/grub.cfg
+	echo 'set default=0' >> build/boot/grub/grub.cfg
+	echo 'menuentry "AnaOS"{' >> build/boot/grub/grub.cfg
+	echo 'multiboot /boot/$<' >> build/boot/grub/grub.cfg
+	echo 'boot' >> build/boot/grub/grub.cfg
+	echo '}'  >> build/boot/grub/grub.cfg
+	mv $< build/boot
+	grub-mkrescue -o $@ build
 
-clean: 
+clean:
 	rm *.o
-	rm *.bin
+	rm -rf build
 	rm *.iso
-
-kernel.iso: kernel.bin
-	mkdir iso
-	mkdir iso/boot
-	mkdir iso/boot/grub
-	cp $< iso/boot/
-	echo 'set timeout=0' > iso/boot/grub/grub.cfg
-	echo 'set default=0' >> iso/boot/grub/grub.cfg
-	echo '' >> iso/boot/grub/grub.cfg
-	echo 'menuentry "RafaOS" {' >> iso/boot/grub/grub.cfg
-	echo 'multiboot /boot/kernel.bin' >> iso/boot/grub/grub.cfg
-	echo 'boot' >> iso/boot/grub/grub.cfg
-	echo '}' >> iso/boot/grub/grub.cfg
-	grub-mkrescue --output=$@ iso
-	rm -rf iso
-
-run: kernel.iso
-	VirtualBox --startvm "RafaOS" &
